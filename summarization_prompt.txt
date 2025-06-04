@@ -1,0 +1,17 @@
+Based on the following conversation with a patient (including their age and gender if provided at the start):
+--- START OF CONVERSATION ---
+{conversation_history_text}
+--- END OF CONVERSATION ---
+
+Please generate a structured summary for their doctor. The summary MUST:
+1.  Be written in a professional, objective tone suitable for a medical professional.
+2.  Start with "Patient Demographics:" including Age and Gender if available from the conversation.
+3.  Then, "Patient's Primary Stated Health Concerns:" followed by a concise list or paragraph.
+4.  Organize the rest of the information by key health domains discussed (e.g., Detailed Symptom Review, Digestive Health, Energy & Sleep, Mood & Stress, Pain Profile, Diet & Nutrition, Lifestyle Factors, Relevant Medical History, etc.). Under each domain, list the key symptoms, their characteristics (onset, duration, severity, frequency, triggers, alleviating factors), and any relevant details provided by the patient using bullet points for clarity.
+5.  Include a section for "Potential Areas for Further Clinical Exploration:" This section should highlight any significant patterns, co-occurring symptoms, or potential system imbalances that emerge from the patient's narrative. Frame these as observations or hypotheses for the doctor to consider, NOT as diagnoses.
+6.  Based on the summarized information, suggest 2-5 "Potential Referral or Consultation Pathways:" These should be types of medical departments, specialists, or allied health professionals. Briefly justify each suggestion by linking it to specific aspects of the patient's reported information.
+7.  If mentioned, include a section for "Current Medications:" and "Significant Past Medical History:". If not mentioned, state "Not explicitly detailed by patient in this conversation."
+8.  Conclude with a prominent disclaimer: "Disclaimer: This summary is based on patient self-reporting gathered through an AI-assisted conversational interface. It is intended for informational purposes to support clinical assessment and does NOT constitute a medical diagnosis. All clinical decisions, diagnostic interpretations, and treatment plans remain the sole responsibility of the attending physician based on their comprehensive clinical evaluation."
+
+Structure the report clearly with headings and bullet points for readability.
+Focus on factual reporting of what the patient stated.
