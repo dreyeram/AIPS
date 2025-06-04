@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
 import json # For parsing LLM responses
-import os # For path joining if needed, though direct filenames work here
+import os
+import re # Import regular expressions
 
 # --- Configuration ---
 OPENROUTER_API_KEY_SECRET = st.secrets.get("OPENROUTER_API_KEY", "")
@@ -23,7 +24,7 @@ def load_prompt(file_path):
 SYSTEM_PROMPT = load_prompt("system_prompt.txt")
 SUMMARIZATION_PROMPT_TEMPLATE = load_prompt("summarization_prompt.txt")
 
-# --- LLM Interaction Function ---
+# --- LLM Interaction Function --- (Remains the same as your last good version)
 def get_llm_response(conversation_history):
     if not OPENROUTER_API_KEY_SECRET:
         st.error("OpenRouter API Key is not configured in app secrets.")
@@ -49,13 +50,14 @@ def get_llm_response(conversation_history):
         st.error(f"API Request Error: {e}")
     except (KeyError, IndexError, json.JSONDecodeError) as e:
         response_text_for_error = response.text if 'response' in locals() else 'No response object'
-        st.error(f"Error parsing LLM response: {e} - Response: {response_text_for_error[:500]}...") # Show part of response
+        st.error(f"Error parsing LLM response: {e} - Response: {response_text_for_error[:500]}...")
     return None
 
 # --- Streamlit App UI and Logic ---
 st.set_page_config(layout="wide", page_title="Holistic Health Screener")
 st.title("🌿 Holistic Health Insight Assistant 🌿")
 
+# Sidebar (remains the same)
 st.sidebar.header("About this Tool")
 st.sidebar.info(
     """
@@ -69,7 +71,6 @@ st.sidebar.info(
 st.sidebar.markdown(f"**Using Model:** `{LLM_MODEL_SECRET}` (configured in secrets)")
 st.sidebar.markdown("---")
 if st.sidebar.button("Clear Chat & Restart Assessment"):
-    # Clear specific relevant keys instead of st.session_state.clear() to preserve others if any
     keys_to_clear = ["messages", "current_llm_question_data", "assessment_phase_complete", 
                      "summary_generated", "summary_text", "initial_greeting_done"]
     for key in keys_to_clear:
@@ -77,7 +78,7 @@ if st.sidebar.button("Clear Chat & Restart Assessment"):
             del st.session_state[key]
     st.rerun()
 
-# Initialize session state variables
+# Initialize session state variables (remains the same)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "current_llm_question_data" not in st.session_state:
@@ -88,62 +89,73 @@ if "summary_generated" not in st.session_state:
     st.session_state.summary_generated = False
 if "summary_text" not in st.session_state:
     st.session_state.summary_text = ""
-if "initial_greeting_done" not in st.session_state: # To handle initial conversational greeting
+if "initial_greeting_done" not in st.session_state:
     st.session_state.initial_greeting_done = False
 
 
-# --- Helper function to process LLM response and update UI state ---
+# --- MODIFIED Helper function to process LLM response and update UI state ---
 def process_llm_response(response_text):
     st.session_state.current_llm_question_data = None # Reset
-    is_structured_json_question = False
-    message_to_display_in_chat = response_text # Default to full response
+    message_to_display_in_chat = response_text # Default
 
+    # Debug: print raw LLM response to logs
+    # print(f"Raw LLM Response: >>>\n{response_text}\n<<<")
+
+    extracted_json_str = None
     try:
-        # Assumes LLM strictly follows "JSON only" rule for interactive questions.
-        data = json.loads(response_text)
-        if isinstance(data, dict) and "input_type" in data and "question_text" in data:
-            st.session_state.current_llm_question_data = data
-            message_to_display_in_chat = data["question_text"] # Display only the question part
-            is_structured_json_question = True
-            if data["input_type"] == "text_display_only":
-                st.session_state.assessment_phase_complete = True
-        # else: LLM returned JSON but not our expected interactive question structure. Treat as plain text.
-    except json.JSONDecodeError:
-        # LLM didn't return a pure JSON string. Treat as a plain conversational message.
-        # This will happen for the initial greeting, for example.
+        # Try to find a JSON object string within the response_text
+        # This regex looks for a string starting with { and ending with }, including newlines.
+        # It's "greedy" by default which is usually what we want here.
+        json_match = re.search(r'(\{[\s\S]*\})', response_text) 
+        if json_match:
+            extracted_json_str = json_match.group(1) # Get the matched group (the JSON string)
+            # print(f"Attempting to parse extracted JSON: >>>\n{extracted_json_str}\n<<<") # Debug
+            data = json.loads(extracted_json_str)
+            if isinstance(data, dict) and "input_type" in data and "question_text" in data:
+                st.session_state.current_llm_question_data = data
+                message_to_display_in_chat = data["question_text"] 
+                if data["input_type"] == "text_display_only":
+                    st.session_state.assessment_phase_complete = True
+            else: # Parsed JSON but not our expected interactive question structure. Fallback.
+                # print("Parsed JSON but not expected structure. Falling back to plain text.") # Debug
+                st.session_state.current_llm_question_data = {"question_text": response_text, "input_type": "text"}
+        else: # No JSON object string found by regex. Treat as plain text.
+            # print("No JSON object found by regex. Treating as plain text.") # Debug
+            st.session_state.current_llm_question_data = {"question_text": response_text, "input_type": "text"}
+            
+    except json.JSONDecodeError as e: # Extracted string was not valid JSON, or initial regex failed
+        # print(f"JSONDecodeError: {e}. Treating as plain text.") # Debug
         st.session_state.current_llm_question_data = {"question_text": response_text, "input_type": "text"}
-        # message_to_display_in_chat is already response_text
+    except Exception as e: # Catch any other unexpected errors during processing
+        # print(f"Unexpected error in process_llm_response: {e}. Treating as plain text.") # Debug
+        st.session_state.current_llm_question_data = {"question_text": response_text, "input_type": "text"}
 
+    # Add the determined message to chat (either just question_text or full original if no JSON)
     st.session_state.messages.append({"role": "assistant", "content": message_to_display_in_chat})
 
 
-# --- Initial greeting from LLM ---
+# --- Initial greeting from LLM --- (Remains the same)
 if not st.session_state.initial_greeting_done and OPENROUTER_API_KEY_SECRET and SYSTEM_PROMPT:
-    if not st.session_state.messages: # Only send if messages list is truly empty
+    if not st.session_state.messages: 
         with st.spinner("Holistic Health Insight Assistant is starting up..."):
-            # For the very first call, the conversation_history only contains the system prompt.
-            # The LLM is instructed to give a conversational intro first.
             initial_response_text = get_llm_response(
                 conversation_history=[{"role": "system", "content": SYSTEM_PROMPT}]
             )
         if initial_response_text:
-            # The first response *should be* conversational text, not JSON, as per prompt.
             process_llm_response(initial_response_text) 
-            st.session_state.initial_greeting_done = True # Mark greeting as done
+            st.session_state.initial_greeting_done = True 
         else:
             st.session_state.messages.append({"role": "assistant", "content": "Hello! I'm ready to start. (Error occurred during initial greeting setup). To begin, could you please tell me your current age?"})
             st.session_state.current_llm_question_data = {"question_text": "To begin, could you please tell me your current age?", "input_type": "text"}
-            st.session_state.initial_greeting_done = True # Mark as done to prevent retries
+            st.session_state.initial_greeting_done = True 
         st.rerun()
 
-
-# --- Display chat messages ---
+# --- Display chat messages --- (Remains the same)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-
-# --- Handle user input based on current LLM question type ---
+# --- Handle user input based on current LLM question type --- (Remains largely the same, relies on process_llm_response)
 if OPENROUTER_API_KEY_SECRET and SYSTEM_PROMPT and st.session_state.initial_greeting_done and \
    not st.session_state.assessment_phase_complete and not st.session_state.summary_generated:
     
@@ -152,14 +164,12 @@ if OPENROUTER_API_KEY_SECRET and SYSTEM_PROMPT and st.session_state.initial_gree
     if llm_q_data and llm_q_data["input_type"] == "options":
         options_data = llm_q_data.get("options", [])
         allow_multiple = llm_q_data.get("allow_multiple_selections", False)
-        
-        # Form key needs to be dynamic if question text changes to ensure form re-renders
-        form_key = f"options_form_{hash(llm_q_data['question_text'])}"
+        form_key = f"options_form_{hash(llm_q_data.get('question_text','default_q'))}" # Add .get for safety
 
         with st.form(key=form_key):
-            # We don't display llm_q_data["question_text"] here again because it's already in chat.
-            # st.markdown(llm_q_data["question_text"]) 
-            
+            # The question text is already in the chat messages from process_llm_response
+            # st.markdown(llm_q_data["question_text"]) # So this line is not strictly needed here
+
             formatted_options = [f"{opt['value']} (e.g., {opt['example']})" if 'example' in opt and opt['example'] else opt['value'] for opt in options_data]
             
             selections_from_ui = []
@@ -172,34 +182,28 @@ if OPENROUTER_API_KEY_SECRET and SYSTEM_PROMPT and st.session_state.initial_gree
             
             other_option_details = next((opt for opt in options_data if "other" in opt.get("value","").lower()), None)
             other_text = ""
-            if other_option_details: # Check if "Other" option exists
+            if other_option_details:
                 other_text = st.text_input("If 'Other', please specify:", key=f"other_{form_key}")
 
             submit_button = st.form_submit_button(label="Submit Answer")
 
             if submit_button:
                 user_response_parts = []
-                
                 for raw_sel_ui in selections_from_ui:
-                    original_value = raw_sel_ui.split(" (e.g.,")[0].strip() # Get original value
+                    original_value = raw_sel_ui.split(" (e.g.,")[0].strip()
                     user_response_parts.append(original_value)
-                    # If this selection was "Other" and they typed something, use their text
                     if "other" in original_value.lower() and other_text:
                         user_response_parts[-1] = f"Other: {other_text.strip()}" 
                 
-                # If "Other" wasn't among selections but text was entered (e.g. user cleared selections but typed other)
                 if not any("other" in part.lower() for part in user_response_parts) and other_option_details and other_text:
                      user_response_parts.append(f"Other: {other_text.strip()}")
-                # Handle case where "Other" is selected but nothing typed.
                 elif any("other" in part.lower() for part in user_response_parts) and not other_text and not any("Other:" in part for part in user_response_parts):
-                    # Find the "Other" selection and mark it as specified but empty
                     for i, part in enumerate(user_response_parts):
                         if "other" in part.lower():
                             user_response_parts[i] = "Other (not specified)"
                             break
-
-
-                user_response_full = "; ".join(user_response_parts) if user_response_parts else "No specific option selected (or cleared selection)."
+                
+                user_response_full = "; ".join(user_response_parts) if user_response_parts else "No specific option selected."
                 
                 st.session_state.messages.append({"role": "user", "content": user_response_full})
                 st.session_state.current_llm_question_data = None 
@@ -213,16 +217,18 @@ if OPENROUTER_API_KEY_SECRET and SYSTEM_PROMPT and st.session_state.initial_gree
                 st.rerun()
 
     elif llm_q_data and llm_q_data["input_type"] == "text":
-        if prompt := st.chat_input("Your answer:", key=f"text_chat_input_{hash(llm_q_data['question_text'])}"):
+        # The question is already displayed in chat from process_llm_response
+        if prompt := st.chat_input("Your answer:", key=f"text_chat_input_{hash(llm_q_data.get('question_text','default_q_text'))}"): # Add .get for safety
             st.session_state.messages.append({"role": "user", "content": prompt})
             st.session_state.current_llm_question_data = None 
 
             if "END ASSESSMENT" in prompt.upper() and len(st.session_state.messages) > 3:
                 st.session_state.assessment_phase_complete = True
                 final_assistant_message_content = "Understood. The information gathering is complete. When you're ready, please click the 'Generate Doctor's Summary' button."
+                # This last message should also go through process_llm_response if we want it to be displayed correctly.
+                # However, for simplicity here, we directly append and set its type.
                 st.session_state.messages.append({"role": "assistant", "content": final_assistant_message_content})
-                # Ensure this last message doesn't get parsed as a question
-                st.session_state.current_llm_question_data = {"question_text": final_assistant_message_content, "input_type": "text_display_only"}
+                st.session_state.current_llm_question_data = {"question_text": final_assistant_message_content, "input_type": "text_display_only"} # Prevent further input
                 st.rerun()
             else:
                 with st.spinner("Thinking..."):
@@ -233,47 +239,48 @@ if OPENROUTER_API_KEY_SECRET and SYSTEM_PROMPT and st.session_state.initial_gree
                     process_llm_response(llm_response_text)
                 st.rerun()
     
-    elif not llm_q_data and st.session_state.initial_greeting_done and st.session_state.messages:
-        # This state can occur if the last LLM call failed or didn't set current_llm_question_data
-        # We can offer a way to retry or just wait. For now, let's indicate waiting.
-        # Or, if the last message was from user, we should be expecting an LLM response.
-        if st.session_state.messages[-1]["role"] == "user":
-            with st.spinner("Waiting for assistant..."):
-                llm_response_text = get_llm_response(
-                    conversation_history=[{"role": "system", "content": SYSTEM_PROMPT}] + st.session_state.messages
-                )
-            if llm_response_text:
-                process_llm_response(llm_response_text)
-                st.rerun()
-            else:
-                st.warning("Having trouble getting a response from the assistant. Please check logs or try restarting.")
+    elif not llm_q_data and st.session_state.initial_greeting_done and st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+        # User has sent a message, and we don't have a current question from LLM (e.g., after text input)
+        # So, get next response from LLM
+        with st.spinner("Waiting for assistant..."):
+            llm_response_text = get_llm_response(
+                conversation_history=[{"role": "system", "content": SYSTEM_PROMPT}] + st.session_state.messages
+            )
+        if llm_response_text:
+            process_llm_response(llm_response_text)
+            st.rerun()
+        else:
+            st.warning("Having trouble getting a response from the assistant. Please check logs or try restarting.")
 
-
-# --- Generate Summary Button ---
+# --- Generate Summary Button --- (Remains the same)
 if st.session_state.assessment_phase_complete and not st.session_state.summary_generated and OPENROUTER_API_KEY_SECRET and SUMMARIZATION_PROMPT_TEMPLATE:
     if st.button("Generate Doctor's Summary", type="primary"):
         with st.spinner("Generating summary for your doctor... This may take a moment."):
             conversation_for_summary = "\n".join(
                 [f"{msg['role'].capitalize()}: {msg['content']}" for msg in st.session_state.messages]
             )
-            summarization_full_prompt_for_llm = SUMMARIZATION_PROMPT_TEMPLATE.format( # Use .format()
-                conversation_history_text=conversation_for_summary
-            )
-            summary_payload_messages = [
-                {"role": "system", "content": "You are an AI assistant specialized in summarizing patient conversations into structured medical reports for doctors. Follow the user's instructions precisely."},
-                {"role": "user", "content": summarization_full_prompt_for_llm}
-            ]
-            summary_text_response = get_llm_response(summary_payload_messages)
-
-            if summary_text_response:
-                st.session_state.summary_text = summary_text_response
-                st.session_state.summary_generated = True
-                st.success("Summary generated successfully!")
+            # Ensure SUMMARIZATION_PROMPT_TEMPLATE is not None before .format()
+            if not SUMMARIZATION_PROMPT_TEMPLATE:
+                st.error("Summarization prompt is missing. Cannot generate summary.")
             else:
-                st.error("Could not generate the summary. Please check API key and try again if needed.")
-            st.rerun()
+                summarization_full_prompt_for_llm = SUMMARIZATION_PROMPT_TEMPLATE.format(
+                    conversation_history_text=conversation_for_summary
+                )
+                summary_payload_messages = [
+                    {"role": "system", "content": "You are an AI assistant specialized in summarizing patient conversations into structured medical reports for doctors. Follow the user's instructions precisely."},
+                    {"role": "user", "content": summarization_full_prompt_for_llm}
+                ]
+                summary_text_response = get_llm_response(summary_payload_messages)
 
-# --- Display Generated Summary ---
+                if summary_text_response:
+                    st.session_state.summary_text = summary_text_response
+                    st.session_state.summary_generated = True
+                    st.success("Summary generated successfully!")
+                else:
+                    st.error("Could not generate the summary. Please check API key and try again if needed.")
+                st.rerun()
+
+# --- Display Generated Summary --- (Remains the same)
 if st.session_state.summary_generated:
     st.markdown("---")
     st.subheader("📋 Summary for Your Doctor")
@@ -281,7 +288,7 @@ if st.session_state.summary_generated:
         "Please review this summary carefully. You can copy it or download it to share with your doctor. "
         "Remember, this is based on your self-reported information and is not a diagnosis."
     )
-    st.text_area("Doctor's Summary:", value=st.session_state.summary_text, height=600, key="summary_display_area_final_v2")
+    st.text_area("Doctor's Summary:", value=st.session_state.summary_text, height=600, key="summary_display_area_final_v3")
     st.download_button(
         label="Download Summary as Text File",
         data=st.session_state.summary_text.encode("utf-8"),
@@ -289,7 +296,8 @@ if st.session_state.summary_generated:
         mime="text/plain"
     )
 
+# --- Final Fallbacks for Missing Config ---
 elif not OPENROUTER_API_KEY_SECRET:
     st.error("OpenRouter API Key is not configured in your app's secrets. Please ask the app administrator to set it up.")
 elif not SYSTEM_PROMPT or not SUMMARIZATION_PROMPT_TEMPLATE:
-     st.error("Core prompt files are missing. The application cannot function correctly. Please check the deployment.")
+     st.error("Core prompt files are missing. The application cannot function correctly. Please check the deployment and ensure system_prompt.txt and summarization_prompt.txt are present.")
