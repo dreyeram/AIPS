@@ -6,7 +6,7 @@ import re # Import regular expressions
 
 # --- Configuration ---
 OPENROUTER_API_KEY_SECRET = st.secrets.get("OPENROUTER_API_KEY", "")
-LLM_MODEL_SECRET = st.secrets.get("LLM_MODEL", "deepseek/deepseek-r1-0528:free")
+LLM_MODEL_SECRET = st.secrets.get("LLM_MODEL", "google/gemma-3-1b-it:free")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # --- Load Prompts from Files ---
